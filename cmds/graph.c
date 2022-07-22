@@ -70,6 +70,15 @@ static void print_addr(struct field_data *fd)
 	pr_out("%*" PRIx64, width, effective_addr(node->addr));
 }
 
+static void print_size(struct field_data *fd)
+{
+	struct uftrace_graph_node *node = fd->arg;
+	if(node->size == 0)
+		pr_out("%8s","");
+	else
+		pr_out("%8u", node->size);
+}
+
 static struct display_field field_total_time = {
 	.id = GRAPH_F_TOTAL_TIME,
 	.name = "total-time",
@@ -103,6 +112,16 @@ static struct display_field field_addr = {
 #endif
 	.print = print_addr,
 	.list = LIST_HEAD_INIT(field_addr.list),
+};
+
+static struct display_field field_size = {
+	.id = GRAPH_F_SIZE,
+	.name = "size",
+	.alias = "size",
+	.header = "  SIZE  ",
+	.length = 8,
+	.print = print_size,
+	.list = LIST_HEAD_INIT(field_size.list),
 };
 
 static void print_task_total_time(struct field_data *fd)
@@ -165,6 +184,7 @@ static struct display_field *field_table[] = {
 	&field_total_time,
 	&field_self_time,
 	&field_addr,
+	&field_size
 };
 
 /* index of this task table should be matched to display_field_id */

@@ -84,7 +84,7 @@ static int add_graph_entry(struct uftrace_task_graph *tg, char *name, size_t nod
 	if (list_no_entry(node, &curr->head, list)) {
 		struct uftrace_trigger tr;
 		struct uftrace_session *sess = tg->graph->sess;
-
+		struct uftrace_symbol *sym;
 		node = xzalloc(node_size);
 
 		node->addr = fstack->addr;
@@ -96,15 +96,15 @@ static int add_graph_entry(struct uftrace_task_graph *tg, char *name, size_t nod
 		node->parent->nr_edges++;
 
 		node->loc = loc;
+		sym = find_symtabs(&sess->sym_info, fstack->addr);
+		if (sym == NULL)
+			goto out;
+		node->size = sym->size;
 
 		if (uftrace_match_filter(fstack->addr, &sess->fixups, &tr)) {
-			struct uftrace_symbol *sym;
+			
 			struct uftrace_special_node *snode;
 			enum uftrace_graph_node_type type = NODE_T_NORMAL;
-
-			sym = find_symtabs(&sess->sym_info, fstack->addr);
-			if (sym == NULL)
-				goto out;
 
 			if (!strcmp(sym->name, "fork") || !strcmp(sym->name, "vfork") ||
 			    !strcmp(sym->name, "daemon"))

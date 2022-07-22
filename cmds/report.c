@@ -26,7 +26,7 @@ static void print_field(struct uftrace_report_node *node, int space)
 	print_field_data(&output_fields, &fd, space);
 }
 
-static void insert_node(struct rb_root *root, struct uftrace_task_reader *task, char *symname,
+static void insert_node(struct rb_root *root, struct uftrace_task_reader *task, char *symname, unsigned size,
 			struct uftrace_dbg_loc *loc)
 {
 	struct uftrace_report_node *node;
@@ -34,7 +34,7 @@ static void insert_node(struct rb_root *root, struct uftrace_task_reader *task, 
 	node = report_find_node(root, symname);
 	if (node == NULL) {
 		node = xzalloc(sizeof(*node));
-		report_add_node(root, symname, node);
+		report_add_node(root, symname, size, node);
 	}
 	report_update_node(node, task, loc);
 }
@@ -51,7 +51,7 @@ static void find_insert_node(struct rb_root *root, struct uftrace_task_reader *t
 		loc = task_find_loc_addr(&task->h->sessions, task, timestamp, addr);
 
 	symname = symbol_getname(sym, addr);
-	insert_node(root, task, symname, loc);
+	insert_node(root, task, symname, sym->size, loc);
 	symbol_putname(sym, symname);
 }
 
@@ -110,7 +110,7 @@ static void add_remaining_fstack(struct uftrace_data *handle, struct rb_root *ro
 				fstack[-1].child_time += fstack->total_time;
 
 			if (fstack->addr == EVENT_ID_PERF_SCHED_IN)
-				insert_node(root, task, sched_sym.name, NULL);
+				insert_node(root, task, sched_sym.name, sched_sym.size, NULL);
 			else
 				find_insert_node(root, task, last_time, fstack->addr,
 						 opts->srcline);
@@ -146,7 +146,7 @@ static void build_function_tree(struct uftrace_data *handle, struct rb_root *roo
 
 		if (rstack->type == UFTRACE_EVENT) {
 			if (rstack->addr == EVENT_ID_PERF_SCHED_IN)
-				insert_node(root, task, sched_sym.name, NULL);
+				insert_node(root, task, sched_sym.name, sched_sym.size, NULL);
 			continue;
 		}
 
@@ -308,7 +308,7 @@ static void add_remaining_task_fstack(struct uftrace_data *handle, struct rb_roo
 				fstack[-1].child_time += fstack->total_time;
 
 			snprintf(buf, sizeof(buf), "%d", task->tid);
-			insert_node(root, task, buf, NULL);
+			insert_node(root, task, buf, 0, NULL);
 		}
 	}
 }
@@ -389,7 +389,7 @@ static void report_task(struct uftrace_data *handle, struct uftrace_opts *opts)
 
 		/* UFTRACE_EXIT */
 		snprintf(buf, sizeof(buf), "%d", task->tid);
-		insert_node(&task_tree, task, buf, NULL);
+		insert_node(&task_tree, task, buf, 0, NULL);
 	}
 
 	if (uftrace_done)

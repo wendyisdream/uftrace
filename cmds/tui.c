@@ -162,19 +162,20 @@ static const char *help[] = {
 	"q             Quit",
 };
 
-#define NUM_GRAPH_FIELD 3
+#define NUM_GRAPH_FIELD 4
 
 static const char *graph_field_names[NUM_GRAPH_FIELD] = {
 	"TOTAL TIME",
 	"SELF TIME",
 	"ADDRESS",
+	"SIZE",
 };
 
-#define NUM_REPORT_FIELD 9
+#define NUM_REPORT_FIELD 10
 
 static const char *report_field_names[NUM_REPORT_FIELD] = {
 	"TOTAL TIME", "TOTAL AVG", "TOTAL MIN", "TOTAL MAX", "SELF TIME",
-	"SELF AVG",   "SELF MIN",  "SELF MAX",	"CALL",
+	"SELF AVG",   "SELF MIN",  "SELF MAX",	"CALL", "SIZE"
 };
 
 static const char *field_help[] = {
@@ -192,7 +193,7 @@ enum tui_mode {
 };
 
 static char *report_sort_key[] = { OPT_SORT_KEYS, "total_avg", "total_min", "total_max", "self",
-				   "self_avg",	  "self_min",  "self_max",  "call" };
+				   "self_avg",	  "self_min",  "self_max",  "call", "size"};
 
 static char *selected_report_sort_key[NUM_REPORT_FIELD];
 
@@ -277,6 +278,15 @@ static void print_graph_addr(struct field_data *fd)
 	printw("%*" PRIx64, width, effective_addr(node->addr));
 }
 
+static void print_graph_size(struct field_data *fd)
+{
+	struct uftrace_graph_node *node = fd->arg;
+	if(node->size)
+		printw("%8u", node->size);
+	else
+		printw("%8s", "");
+}
+
 static struct display_field graph_field_total = {
 	.id = GRAPH_F_TOTAL_TIME,
 	.name = "total-time",
@@ -312,11 +322,22 @@ static struct display_field graph_field_addr = {
 	.list = LIST_HEAD_INIT(graph_field_addr.list),
 };
 
+static struct display_field graph_field_size = {
+	.id = GRAPH_F_SIZE,
+	.name = "size",
+	.alias = "size",
+	.header = "  SIZE  ",
+	.length = 8,
+	.print = print_graph_size,
+	.list = LIST_HEAD_INIT(graph_field_size.list),
+};
+
 /* index of this table should be matched to display_field_id */
 static struct display_field *graph_field_table[] = {
 	&graph_field_total,
 	&graph_field_self,
 	&graph_field_addr,
+	&graph_field_size,
 };
 
 /* clang-format off */
@@ -341,7 +362,7 @@ static void print_report_##_func(struct field_data *fd)                         
 }                                                                                                  \
 REPORT_FIELD_STRUCT(_id, _name, _func, _header, 11)
 
-#define REPORT_FIELD_CALL(_id, _name, _field, _func, _header)                                      \
+#define REPORT_FIELD_NUM(_id, _name, _field, _func, _header)                                      \
 static void print_report_##_func(struct field_data *fd)                                            \
 {                                                                                                  \
 	struct uftrace_report_node *node = fd->arg;                                                \
@@ -359,7 +380,8 @@ REPORT_FIELD_TIME(REPORT_F_SELF_TIME, self, self.sum, self, "SELF TIME");
 REPORT_FIELD_TIME(REPORT_F_SELF_TIME_AVG, self-avg, self.avg, self_avg, "SELF AVG");
 REPORT_FIELD_TIME(REPORT_F_SELF_TIME_MIN, self-min, self.min, self_min, "SELF MIN");
 REPORT_FIELD_TIME(REPORT_F_SELF_TIME_MAX, self-max, self.max, self_max, "SELF MAX");
-REPORT_FIELD_CALL(REPORT_F_CALL, call, call, call, "CALL");
+REPORT_FIELD_NUM(REPORT_F_CALL, call, call, call, "CALL");
+REPORT_FIELD_NUM(REPORT_F_SIZE, size, size, size, "SIZE");
 
 /* clang-format on */
 
@@ -367,6 +389,7 @@ static struct display_field *report_field_table[] = {
 	&report_field_total,	 &report_field_total_avg, &report_field_total_min,
 	&report_field_total_max, &report_field_self,	  &report_field_self_avg,
 	&report_field_self_min,	 &report_field_self_max,  &report_field_call,
+	&report_field_size,
 };
 
 static void setup_default_graph_field(struct list_head *fields, struct uftrace_opts *opts,
@@ -472,7 +495,7 @@ static bool list_is_none(struct list_head *list)
 	return list->next == NULL && list->prev == NULL;
 }
 
-static void update_report_node(struct uftrace_task_reader *task, char *symname,
+static void update_report_node(struct uftrace_task_reader *task, char *symname, unsigned size,
 			       struct uftrace_task_graph *tg)
 {
 	struct tui_report_node *node;
@@ -486,7 +509,7 @@ static void update_report_node(struct uftrace_task_reader *task, char *symname,
 	if (node == NULL) {
 		node = xzalloc(sizeof(*node));
 		INIT_LIST_HEAD(&node->head);
-		report_add_node(&tui_report.name_tree, symname, (void *)node);
+		report_add_node(&tui_report.name_tree, symname, size, (void *)node);
 		tui_report.nr_func++;
 	}
 
@@ -532,14 +555,14 @@ static int build_tui_node(struct uftrace_task_reader *task, struct uftrace_recor
 		name = symbol_getname(sym, addr);
 
 		if (rec->type == UFTRACE_EXIT)
-			update_report_node(task, name, tg);
+			update_report_node(task, name, sym->size, tg);
 	}
 	else if (rec->type == UFTRACE_EVENT) {
 		sym = &sched_sym;
 		name = symbol_getname(sym, addr);
 
 		if (addr == EVENT_ID_PERF_SCHED_IN)
-			update_report_node(task, name, tg);
+			update_report_node(task, name, sym->size, tg);
 		else if (addr != EVENT_ID_PERF_SCHED_OUT)
 			return 0;
 	}
@@ -603,7 +626,7 @@ static void add_remaining_node(struct uftrace_opts *opts, struct uftrace_data *h
 			if (task->stack_count > 0)
 				fstack[-1].child_time += fstack->total_time;
 
-			update_report_node(task, name, tg);
+			update_report_node(task, name, sym->size, tg);
 			graph_add_node(tg, UFTRACE_EXIT, name, sizeof(struct tui_graph_node), NULL);
 
 			symbol_putname(sym, name);

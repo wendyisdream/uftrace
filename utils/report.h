@@ -28,6 +28,7 @@ struct uftrace_report_node {
 	struct report_time_stat self;
 	struct uftrace_dbg_loc *loc;
 	uint64_t call;
+	unsigned size;
 	struct rb_node name_link;
 	struct rb_node sort_link;
 
@@ -49,7 +50,7 @@ struct uftrace_diff_policy {
 extern struct uftrace_diff_policy diff_policy;
 
 struct uftrace_report_node *report_find_node(struct rb_root *root, const char *name);
-void report_add_node(struct rb_root *root, const char *name, struct uftrace_report_node *node);
+void report_add_node(struct rb_root *root, const char *name, unsigned f_size, struct uftrace_report_node *node);
 void report_update_node(struct uftrace_report_node *node, struct uftrace_task_reader *task,
 			struct uftrace_dbg_loc *loc);
 void report_calc_avg(struct rb_root *root);
